@@ -1,34 +1,51 @@
+
 # CPU-BOPs
 
-CPU-BOPs 是一组用于测试CPU平台上负载程序消耗的BOPs值（基本操作数）的实验脚本。
+CPU-BOPs 是一组用于 **在 Linux CPU 平台上测量负载程序 CPU 行为与 BOPs（Basic Operations）指标** 的实验脚本工具。
 
-该项目运行在 Linux 环境下，通过 cgroup 对负载程序施加 CPU / 内存限制，
-并在运行过程中采集 CPU 使用率和 BOPs 指标，用于分析不同资源限制和负载强度下
-程序的 CPU 行为表现。
+该项目通过 **cgroup** 对负载程序施加 CPU / 内存资源限制，并在负载运行过程中同步采集：
 
+* CPU 使用率时间序列
+* 基于 `perf` 的 BOPs / 指令级统计指标
+
+用于分析 **不同资源限制、不同负载特性** 下程序的 CPU 行为表现。
 
 ---
 
-## 这个项目解决什么问题
+## 项目解决的问题
 
-在系统性能实验中，常常需要回答以下问题：
+在系统性能实验与算力度量中，常常需要回答以下问题：
 
-- 某个负载程序在 CPU 受限条件下的运行表现
-- 不同负载强度变化时 CPU 使用率的变化情况
-- 在可控环境中重复采集实验数据
+* 某个负载在给定 CPU / 内存限制下的运行行为如何？
+* 不同负载强度、不同执行时间窗口下，CPU 使用率和 BOPs 如何变化？
+* 如何在可控、可复现的环境中，对真实负载进行统一测量？
 
-CPU-BOPs 提供了一种相对简单、可复现的方式来完成上述测试。
+CPU-BOPs 提供了一种 **轻量、可复现、面向真实负载的实验执行与采集框架**。
+
+---
+
+## 支持的负载类型（重要）
+
+CPU-BOPs **支持任意 Linux 可执行负载**，包括：
+
+* **Linux 原生可执行程序（ELF）**
+* **Shell 脚本（`.sh`）**
+* **Python 脚本（`.py`）**
+* **带 shebang 的可执行脚本**（如 `#!/usr/bin/env python3`）
+
+> 说明：
+>
+> * 所谓 “exe”，在 Linux 环境下指 **ELF 可执行文件**。
+> * **不支持 Windows PE 格式的 `.exe` 文件**。
+> * Java 程序需通过启动脚本（如 `run_java.sh`）作为可执行入口。
 
 ---
 
 ## 当前限制
 
-目前该项目存在以下限制：
-
-- 只能测试用户显式指定的负载脚本
-- 不支持直接测试任意二进制程序
-
-后续功能将在此基础上逐步扩展。
+* 不支持直接运行 Windows `.exe`（PE 格式）
+* 不负责语言运行时管理（如自动推断 Java classpath）
+* BOPs 统计依赖于硬件与 `perf` 支持情况（不同架构事件不同）
 
 ---
 
@@ -37,96 +54,134 @@ CPU-BOPs 提供了一种相对简单、可复现的方式来完成上述测试�
 ```text
 CPU-BOPs/
 ├── collector.sh
-│   负责参数解析和实验流程控制
+│   实验入口脚本，负责参数解析与执行调度
 │
 ├── agent_executor.sh
-│   负责 cgroup 配置、BOPs 监控、CPU 使用率采集以及资源清理
+│   核心执行器：
+│   - cgroup 配置
+│   - perf / CPU 使用率监控
+│   - 负载进程管理与清理
 │
 ├── cpuUsages.sh
 │   基于 sar 的 CPU 使用率采样脚本
 │
 ├── mock_load_script.sh
-│   示例 CPU 负载脚本
+│   示例：CPU 爬坡负载脚本（用于内部/对照实验）
 │
 └── README.md
 ```
 
-
-
-
 ---
 
-## 运行环境
+## 运行环境要求
 
-- Linux（CentOS / Ubuntu）
-- bash
-- BOPs
-- sysstat（sar）
-- cgroup-tools
-- 需要 sudo 权限
+* Linux（CentOS / Ubuntu）
+* bash
+* perf
+* sysstat（sar）
+* cgroup-tools
+* 需要 sudo 权限
 
 ---
 
 ## 参数说明
-| 参数名                 | 含义             |
-| ------------------- | -------------- |
-| --id                | 实验标识，用于区分不同实验  |
-| --upload-file-path  | 被测试的负载脚本路径     |
-| --output-path       | 实验结果 JSON 输出路径 |
-| --cpu-limit-pct     | CPU 使用上限（百分比）  |
-| --mem-limit-pct     | 内存使用上限（百分比）    |
-| --monitor-duration  | 实验与监控持续时间      |
-| --collect-frequency | CPU 使用率采样间隔    |
-| --start-load-pct    | 初始负载强度         |
-| --end-load-pct      | 最终负载强度         |
-| --step-pct          | 负载强度递增步长       |
+
+### 必须参数（缺一不可）
+
+| 参数名                  | 含义                   |
+| -------------------- | -------------------- |
+| `--id`               | 实验标识，用于区分不同实验        |
+| `--upload-file-path` | 被测试的负载路径（可执行文件 / 脚本） |
+| `--output-path`      | 实验结果输出路径             |
+
+---
+
+### 通用可选参数（真实负载 & 爬坡负载通用）
+
+| 参数名                   | 含义                      | 默认值 |
+| --------------------- | ----------------------- | --- |
+| `--cpu-limit-pct`     | CPU 使用上限（百分比）           | 100 |
+| `--mem-limit-pct`     | 内存使用上限（百分比）             | 100 |
+| `--monitor-duration`  | 负载**最大允许运行时间（timeout）** | 60s |
+| `--collect-frequency` | CPU 使用率 / perf 采样间隔     | 1s  |
+
+> 说明：
+>
+> * `monitor-duration` 表示 **最长运行时间**。
+> * 如果负载提前结束，实验会提前进入“空闲监控阶段”。
+
+---
+
+### 爬坡负载专用参数（仅对 mock_load_script.sh 有效）
+
+以下参数 **仅在使用示例爬坡负载时生效**，对真实负载不会注入或生效：
+
+| 参数名                | 含义       |
+| ------------------ | -------- |
+| `--start-load-pct` | 初始负载强度   |
+| `--end-load-pct`   | 最终负载强度   |
+| `--step-pct`       | 负载强度递增步长 |
+
+---
 
 ## 使用示例
 
-下面的示例展示了如何对一个给定的负载脚本进行测试：
+### 示例 1：测试一个真实负载（推荐用法）
 
 ```bash
-./collector.sh \
-  --id=test001 \
+bash collector.sh \
+  --id=test_min \
+  --upload-file-path=./my_workload \
+  --output-path=/tmp/test_min.json \
+  --monitor-duration=30s
+```
+
+适用于：
+
+* ELF 二进制
+* Python / Shell 脚本
+* shebang 可执行脚本
+
+---
+
+### 示例 2：测试示例 CPU 爬坡负载
+
+```bash
+bash collector.sh \
+  --id=ramp_test \
   --upload-file-path=./mock_load_script.sh \
-  --output-path=/tmp/test001.json \
-  --cpu-limit-pct=80 \
-  --mem-limit-pct=100 \
+  --output-path=/tmp/ramp_test.json \
   --monitor-duration=30s \
-  --collect-frequency=1s \
   --start-load-pct=10 \
   --end-load-pct=50 \
   --step-pct=10
-
 ```
 
-upload-file-path 用于指定需要测试的负载脚本。
+---
 
-输出结果
-实验结束后会生成一个 JSON 文件，包含：
+## 输出结果说明
 
-实验基本信息
+实验结束后，会在输出目录生成多类日志文件，包括：
 
-BOPs 采集的 CPU 指标
+* BOPs / perf 采样数据
+* CPU 使用率时间序列
+* 负载程序的 stdout / stderr
+* 实验运行时长信息
 
-CPU 使用率时间序列
+这些数据可用于后续分析、建模或绘图。
 
-负载程序的标准输出和错误输出
+---
 
-这些数据可用于后续分析或绘图。
+## 说明
 
-说明
-该项目更偏向实验脚本集合，主要用于系统性能测试和研究场景。
-如果需要更通用的负载测试能力，需要在此基础上进一步扩展。
+CPU-BOPs 是一个 **面向系统性能测量与研究场景的实验工具**，强调：
 
+* 真实负载可执行
+* 行为可复现
+* 资源可控
+* 数据可分析
 
+如需更复杂的运行时管理或多语言支持，可在此基础上进一步扩展。
 
-
-
-
-
-
-
-
-
+---
 
