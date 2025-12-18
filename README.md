@@ -1,4 +1,3 @@
-
 # CPU-BOPs
 
 CPU-BOPs 是一组用于 **在 Linux CPU 平台上测量负载程序 CPU 行为与 BOPs（Basic Operations）指标** 的实验脚本工具。
@@ -73,14 +72,6 @@ CPU-BOPs/
 
 ---
 
-## 运行环境要求
-
-* Linux（CentOS / Ubuntu）
-* bash
-* perf
-* sysstat（sar）
-* cgroup-tools
-* 需要 sudo 权限
 
 ---
 
@@ -184,4 +175,5 @@ CPU-BOPs 是一个 **面向系统性能测量与研究场景的实验工具**，
 如需更复杂的运行时管理或多语言支持，可在此基础上进一步扩展。
 
 ---
+
 
