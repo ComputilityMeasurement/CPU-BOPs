@@ -241,6 +241,8 @@ if [[ -x ./cpuUsages.sh ]]; then
   setsid ./cpuUsages.sh >"$CPU_FILE" 2>/dev/null &
   CPU_PID=$!
 else
+  # [!! 关键修复 (V15) !!]
+  # 1. 确保 sysstat (sar) 已安装
   if ! command -v sar &> /dev/null; then
     echo "FATAL: 'sysstat' (sar) is missing. Please install it!" >&2
     # 立即杀死已启动的 perf，避免僵尸进程
@@ -346,6 +348,11 @@ LOAD_CMD_STR="$(build_load_cmd "$UPLOAD_FILE")"
 # shellcheck disable=SC2206
 LOAD_CMD=($LOAD_CMD_STR)
 
+# ✅ 仅当使用示例爬坡负载时，才注入爬坡参数（保持 ramp 功能）
+if [[ "$(basename "$UPLOAD_FILE")" == "mock_load_script.sh" ]]; then
+  echo "Detected mock_load_script.sh, injecting ramp args: start=$START_LOAD_PCT end=$END_LOAD_PCT step=$STEP_PCT"
+  LOAD_CMD+=("--start-load-pct=$START_LOAD_PCT" "--end-load-pct=$END_LOAD_PCT" "--step-pct=$STEP_PCT")
+fi
 
 
 
