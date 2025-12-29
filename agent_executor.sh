@@ -14,65 +14,109 @@ END_LOAD_PCT="0"
 STEP_PCT="0"
 
 # --- 进程清理函数 (与 V6 相同) ---
+# --- 进程清理函数 (V18 Pro - 核弹级清理) ---
 cleanup() {
-  echo "Cleaning up all monitor processes (trap)..."
+  echo ">>> [Cleanup] Triggered at $(date '+%H:%M:%S')..."
   
-# 1. perf (修正版：先 SIGINT 刷出缓存，再 KILL)
-  if [[ -n "${PERF_PID:-}" ]] && kill -0 "$PERF_PID" 2>/dev/null; then
-    echo "Stopping perf monitor (SIGINT) to flush buffers..."
-    
-    # 发送 SIGINT (也就是 Ctrl+C)，perf 收到这个信号会打印 Summary 并刷新缓冲区
-    PGID_P=$(ps -o pgid= -p "$PERF_PID" | tr -d ' ')
-    if [[ -n "$PGID_P" ]]; then 
-        kill -INT -"$PGID_P" 2>/dev/null || true
-    else 
-        kill -INT "$PERF_PID" 2>/dev/null || true
-    fi
-    
-    # 给它 2 秒钟时间处理后事 (写日志)
-    sleep 2
-    
-    # 如果还活着，再强制杀
+  # ---------------------------------------------------------
+  # 1. 停止 Perf (优雅退出以保存数据)
+  # ---------------------------------------------------------
+  if [[ -n "${PERF_PID:-}" ]]; then
     if kill -0 "$PERF_PID" 2>/dev/null; then
-        echo "Perf still alive, sending SIGKILL..."
-        if [[ -n "$PGID_P" ]]; then kill -KILL -"$PGID_P" 2>/dev/null || true; else kill -KILL "$PERF_PID" 2>/dev/null || true; fi
+      echo "  -> Stopping Perf (SIGINT) to flush buffers..."
+      kill -INT "$PERF_PID" 2>/dev/null || true
+      # 等待 perf 写完文件 (最多等 3 秒)
+      for i in {1..30}; do
+        kill -0 "$PERF_PID" 2>/dev/null || break
+        sleep 0.1
+      done
+      
+      # 如果还不死，强制杀
+      if kill -0 "$PERF_PID" 2>/dev/null; then
+         echo "  -> Perf stuck, force killing..."
+         kill -KILL "$PERF_PID" 2>/dev/null || true
+      fi
     fi
   fi
 
-  # 2. cpuUsages
-  if [[ -n "${CPU_PID:-}" ]] && kill -0 "$CPU_PID" 2>/dev/null; then
-    echo "Sending SIGINT (polite) to cpuUsages group GID $CPU_PID..."
-    PGID_C=$(ps -o pgid= -p "$CPU_PID" | tr -d ' ')
-    if [[ -n "$PGID_C" ]]; then kill -INT -"$PGID_C" 2>/dev/null || true; else kill -INT "$CPU_PID" 2>/dev/null || true; fi
-    sleep 2 # 等待 awk 刷新
-    if kill -0 "$CPU_PID" 2>/dev/null; then
-      echo "cpuUsages GID $CPU_PID did not exit, sending SIGKILL."
-      if [[ -n "$PGID_C" ]]; then kill -KILL -"$PGID_C" 2>/dev/null || true; else kill -KILL "$CPU_PID" 2>/dev/null || true; fi
+
+  # ---------------------------------------------------------
+# 2. 停止 CPU/SAR 监控 (V18 Pro 修复版)
+  # ---------------------------------------------------------
+  if [[ -n "${CPU_PID:-}" ]]; then
+    echo "  -> Stopping CPU Monitor (PID $CPU_PID)..."
+    
+    # 1. 尝试获取进程组 ID (PGID)
+    # ps -o pgid= 会返回 PGID，setsid 启动的进程 PGID 通常等于 PID
+    PGID_C=$(ps -o pgid= -p "$CPU_PID" 2>/dev/null | tr -d ' ')
+    
+    # 2. 杀整个进程组 (关键！注意那个负号 -)
+    if [[ -n "$PGID_C" ]]; then
+       echo "     Killing Process Group -$PGID_C (includes sar/awk)"
+       kill -TERM -"$PGID_C" 2>/dev/null || true
+       sleep 0.5
+       kill -KILL -"$PGID_C" 2>/dev/null || true
+    else
+       # 如果获取不到组，就只能硬杀 PID，并尝试手动扫尾 sar
+       kill -KILL "$CPU_PID" 2>/dev/null || true
+       pkill -P "$CPU_PID" 2>/dev/null || true # 尝试杀子进程
     fi
   fi
+
+  # ---------------------------------------------------------
+  # 3. 停止负载 (重点！)
+  # ---------------------------------------------------------
+  echo "  -> Stopping Workload..."
   
-  # 3. 负载
-  if [[ -n "${LOAD_PID:-}" ]] && kill -0 "$LOAD_PID" 2>/dev/null; then
-    echo "Cleaning up lingering load process GID $LOAD_PID (sending SIGTERM)..."
-    PGID_L=$(ps -o pgid= -p "$LOAD_PID" | tr -d ' ')
-    if [[ -n "$PGID_L" ]]; then 
-        kill -TERM -"${PGID_L}" 2>/dev/null || true;
-    else 
-        kill -TERM "$LOAD_PID" 2>/dev/null || true; 
-    fi
-    for _ in {1..20}; do sleep 0.1; kill -0 "$LOAD_PID" 2>/dev/null || break; done
-    if kill -0 "$LOAD_PID" 2>/dev/null; then
-      echo "Load still alive, sending SIGKILL..."
-      if [[ -n "$PGID_L" ]]; then kill -KILL -"$PGID_L" 2>/dev/null || true; else kill -KILL "$LOAD_PID" 2>/dev/null || true; fi
-    fi
+  # A. 先尝试杀启动命令本身 (sudo cgexec ...)
+  if [[ -n "${LOAD_PID:-}" ]]; then
+      # 因为是 sudo 启动的，必须用 sudo kill
+      sudo kill -TERM "$LOAD_PID" 2>/dev/null || true
   fi
 
-  # 4. cgroup
+  # B. 【核武器】直接查 Cgroup 里还剩谁，全部枪毙
+  # 无论负载衍生了多少子进程(awk, sleep等)，只要在组里，一个都跑不掉
   if [[ -n "${CG:-}" ]]; then
-    echo "Cleaning up cgroup: $CG"
-    sudo cgdelete -r -g cpu,memory:"$CG" >/dev/null 2>&1 || echo "Warning: cgdelete failed."
+      # 检查 cpu 子系统下的 pids (路径可能因系统而异，这里做兼容)
+      PROCS_FILE="/sys/fs/cgroup/cpu/${CG}/cgroup.procs"
+      if [[ ! -f "$PROCS_FILE" ]]; then
+          PROCS_FILE="/sys/fs/cgroup/cpu/${CG}/tasks"
+      fi
+
+      if [[ -f "$PROCS_FILE" ]]; then
+          # 读取组内所有 PID
+          PIDS=$(cat "$PROCS_FILE" 2>/dev/null || true)
+          
+          if [[ -n "$PIDS" ]]; then
+              echo "  -> Found lingering processes in Cgroup, Force Killing: $PIDS"
+              # xargs 配合 sudo kill -9，效率最高
+              echo "$PIDS" | xargs -r sudo kill -9 2>/dev/null || true
+          fi
+      fi
   fi
+
+  # ---------------------------------------------------------
+  # 4. 删除 Cgroup
+  # ---------------------------------------------------------
+  if [[ -n "${CG:-}" ]]; then
+    echo "  -> Deleting Cgroup: $CG"
+    # 尝试删除，如果失败说明还有僵尸进程，多试几次
+    for i in {1..5}; do
+        sudo cgdelete -r -g cpu,memory,perf_event:"$CG" >/dev/null 2>&1
+        if [[ $? -eq 0 ]]; then
+            break
+        fi
+        sleep 0.2
+        # 如果删不掉，再杀一次组内进程
+        if [[ -f "$PROCS_FILE" ]]; then
+             cat "$PROCS_FILE" 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+        fi
+    done
+  fi
+
+  echo ">>> [Cleanup] Done."
 }
+
 # --- 绑定 trap ---
 trap cleanup EXIT INT TERM
 
@@ -163,7 +207,13 @@ CG="task_${ID}"
 
 # --- Cgroup 设置 (与 V6 相同) ---
 echo "Setting up cgroup: $CG..."
-sudo cgcreate -g cpu,memory:"$CG" >/dev/null 2>&1 || true
+# 尝试挂载 perf_event 子系统 (有些系统默认没挂载)
+sudo mkdir -p /sys/fs/cgroup/perf_event
+sudo mount -t cgroup -o perf_event perf_event /sys/fs/cgroup/perf_event 2>/dev/null || true
+
+# 创建包含 perf_event 的组
+echo "Creating cgroup with perf_event subsystem..."
+sudo cgcreate -g cpu,memory,perf_event:"$CG" >/dev/null 2>&1 || echo "Warning: cgcreate failed (check if perf_event exists)"
 CPU_PERIOD_US=100000
 NPROC="$(nproc || echo 1)"
 if ! [[ "$CPU_LIMIT_PCT" =~ ^[0-9]+$ ]]; then CPU_LIMIT_PCT=100; fi
@@ -223,51 +273,6 @@ else
     echo "FATAL: Unsupported architecture: $ARCH_RAW. Only x86_64 and aarch64 are supported." >&2
     exit 3
 fi
-
-# --- 启动监控 (使用动态设置的变量) ---
-echo "Starting monitors (perf, cpuUsages)..."
-START_TS_NANO=$(date +%s%N 2>/dev/null || echo "$(date +%s)000000000") 
-INTERVAL_MS="$(to_millis "$COLLECT_FREQUENCY")"
-
-echo "Starting perf with events for $ARCH_NAME..."
-echo "Using event list: ${FINAL_EVENTS}"
-setsid perf stat \
-  -e "${FINAL_EVENTS}" \
-  -a -I "$INTERVAL_MS" -x , \
-  >/dev/null 2>>"$BOP_FILE" &
-PERF_PID=$!
-
-if [[ -x ./cpuUsages.sh ]]; then
-  setsid ./cpuUsages.sh >"$CPU_FILE" 2>/dev/null &
-  CPU_PID=$!
-else
-  # [!! 关键修复 (V15) !!]
-  # 1. 确保 sysstat (sar) 已安装
-  if ! command -v sar &> /dev/null; then
-    echo "FATAL: 'sysstat' (sar) is missing. Please install it!" >&2
-    # 立即杀死已启动的 perf，避免僵尸进程
-    if [[ -n "${PERF_PID:-}" ]]; then kill -KILL "$PERF_PID" 2>/dev/null || true; fi
-    exit 5
-  fi
-
-  # 2. 启动 sar 进程 (替代 while loop)
-  # setsid: 放入新会话，方便清理
-  # stdbuf -oL: 强制行缓冲，确保实时输出
-  # sar -u 1: 每秒输出一次 CPU 使用率
-  # awk: 格式化输出为 "YYYY-MM-DD HH:MM:SS CPU Usage: XX.X%"
-  #      (注意：这里使用 date 命令获取当前时间，因为 sar 的时间戳格式可能不统一)
-  setsid stdbuf -oL sar -u 1 | awk -v date_cmd="date '+%Y-%m-%d %H:%M:%S'" \
-    'NR>3 && $NF ~ /[0-9.]+/ { 
-       cmd = date_cmd; cmd | getline ts; close(cmd);
-       usage = 100 - $NF; 
-       printf "%s CPU Usage: %.2f%%\n", ts, usage;
-       fflush(); 
-    }' >"$CPU_FILE" 2>/dev/null &
-  
-  CPU_PID=$!
-fi
-
-
 
 
 # --- [新增] 构造普适负载命令：支持 sh / py / ELF / shebang ---
@@ -339,6 +344,8 @@ build_load_cmd() {
   echo "$p"
 }
 
+
+
 # --- 启动负载（普适） ---
 echo "Starting workload: $UPLOAD_FILE"
 
@@ -355,12 +362,81 @@ if [[ "$(basename "$UPLOAD_FILE")" == "mock_load_script.sh" ]]; then
 fi
 
 
+# --- 启动监控 (使用动态设置的变量) ---
+echo "Starting monitors (perf, cpuUsages)..."
+START_TS_NANO=$(date +%s%N 2>/dev/null || echo "$(date +%s)000000000") 
+INTERVAL_MS="$(to_millis "$COLLECT_FREQUENCY")"
 
+echo "Starting perf with events for $ARCH_NAME..."
+echo "Using event list: ${FINAL_EVENTS}"
 
-
-setsid sudo cgexec -g cpu,memory:"$CG" "${LOAD_CMD[@]}" \
-  >"$STDOUT_FILE" 2>"$STDERR_FILE" &
+# [第一步] 先启动负载，并放入 Cgroup (后台运行)
+echo ">>> Phase 1: Launching workload into Cgroup '$CG'..."
+# 注意：这里必须和创建时的子系统列表一致
+sudo cgexec -g cpu,memory,perf_event:"$CG" "${LOAD_CMD[@]}" >"$STDOUT_FILE" 2>"$STDERR_FILE" &
 LOAD_PID=$!
+echo "Workload started with PID $LOAD_PID. Waiting 0.5s for cgroup population..."
+
+# 给内核一点时间把进程注册到 cgroup
+sleep 0.5
+
+# [第二步] 启动 Perf (-a -G 模式)
+# Perf 监控的时长 = 用户设定的时长 + 5秒缓冲
+PERF_DURATION=$(( $(to_seconds "$MONITOR_DURATION") + 5 ))
+
+echo ">>> Phase 2: Starting Perf Monitor (-a -G mode)..."
+perf stat \
+  -e "${FINAL_EVENTS}" \
+  -a \
+  -G "$CG" \
+  -I "$INTERVAL_MS" -x , \
+  -o "$BOP_FILE" --append \
+  -- sleep "$PERF_DURATION" &  # 让 perf 监控 sleep，实际上是在过滤 -G 指定的组
+
+PERF_PID=$!
+echo "Perf PID: $PERF_PID, Monitoring Cgroup: $CG"
+
+
+if [[ -x ./cpuUsages.sh ]]; then
+  setsid ./cpuUsages.sh >"$CPU_FILE" 2>/dev/null &
+  CPU_PID=$!
+else
+  # [!! 关键修复 (V15) !!]
+  # 1. 确保 sysstat (sar) 已安装
+  if ! command -v sar &> /dev/null; then
+    echo "FATAL: 'sysstat' (sar) is missing. Please install it!" >&2
+    # 立即杀死已启动的 perf，避免僵尸进程
+    if [[ -n "${PERF_PID:-}" ]]; then kill -KILL "$PERF_PID" 2>/dev/null || true; fi
+    exit 5
+  fi
+
+  # 2. 启动 sar 进程 (替代 while loop)
+  # setsid: 放入新会话，方便清理
+  # stdbuf -oL: 强制行缓冲，确保实时输出
+  # sar -u 1: 每秒输出一次 CPU 使用率
+  # awk: 格式化输出为 "YYYY-MM-DD HH:MM:SS CPU Usage: XX.X%"
+  #      (注意：这里使用 date 命令获取当前时间，因为 sar 的时间戳格式可能不统一)
+  setsid stdbuf -oL sar -u 1 | awk -v date_cmd="date '+%Y-%m-%d %H:%M:%S'" \
+    'NR>3 && $NF ~ /[0-9.]+/ { 
+       cmd = date_cmd; cmd | getline ts; close(cmd);
+       usage = 100 - $NF; 
+       printf "%s CPU Usage: %.2f%%\n", ts, usage;
+       fflush(); 
+    }' >"$CPU_FILE" 2>/dev/null &
+  
+  CPU_PID=$!
+fi
+
+
+
+
+
+
+
+
+
+
+
 
 # --- [修改] 分离负载时间和监控总时间 ---
 LOAD_SEC="$(to_seconds "$MONITOR_DURATION")"
@@ -384,16 +460,9 @@ while :; do
   
   # [新增逻辑 A] 时间到了 LOAD_SEC (30s)：只杀负载，不退循环
   if (( ELAPSED >= LOAD_SEC )) && [[ "$LOAD_ALIVE" -eq 1 ]]; then
-    echo ">>> Load duration reached (${LOAD_SEC}s). Stopping workload only..."
-    PGID=$(ps -o pgid= -p "$LOAD_PID" | tr -d ' ')
-    if [[ -n "$PGID" ]]; then
-      kill -TERM -"${PGID}" 2>/dev/null || true
-    else
-      kill -TERM "$LOAD_PID" 2>/dev/null || true
-    fi
-    wait "$LOAD_PID" 2>/dev/null || true
+    echo ">>> Load duration reached (${LOAD_SEC}s). Stopping perf..."
+    kill -INT "$PERF_PID" 2>/dev/null || true
     LOAD_ALIVE=0
-    # 注意：这里没有 break，循环继续，监控继续跑
   fi
 
   # [修改逻辑 B] 时间到了 RUN_SEC (35s)：退出循环，触发 cleanup 杀监控
