@@ -4,6 +4,26 @@ CPU-BOPs 是一组用于在 Linux CPU 平台上测量负载程序运行周期消
 
 该项目通过非入侵的方式，监测被测量的应用程序的运行生命周期，按照指定频率采集BOPs指标关联的指令级的事件操作数，通过计算，最终计算出BOPs值。
 
+。
+
+## 环境依赖 (Prerequisites)
+为了确保 CPU-BOPs 能够正常运行，宿主机必须满足以下软硬件要求。
+
+1. 操作系统与权限
+操作系统：Linux (CentOS 7+, Ubuntu 18.04+, Debian 10+ 等主流发行版)。
+
+内核版本：建议 Kernel 3.10 以上（需支持 Cgroup v1）。
+
+权限要求：必须拥有 root 权限 或 sudo 权限。
+
+原因：脚本需要创建 Cgroup 节点、挂载子系统以及运行系统级监控。
+
+
+工具名称,作用,对应软件包 (CentOS/RHEL),对应软件包 (Ubuntu/Debian)
+perf,采集硬件性能事件 (BOPs),perf,linux-tools-$(uname -r)
+cgroup-tools,"管理资源隔离组 (cgcreate, cgexec)",libcgroup-tools,cgroup-tools
+sysstat,采集 CPU 使用率 (sar),sysstat,sysstat
+bc,(可选) 部分数值计算,bc,bc
 
 
 ## 项目解决的问题
