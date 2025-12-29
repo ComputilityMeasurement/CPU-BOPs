@@ -130,19 +130,21 @@ bash collector.sh \
 
 ##输出结果展示：
 
-<details>
-<summary><b>Perf stat raw output (click to expand)</b></summary>
-
-```csv
-
-
-time,value,,event,task,pid,cpu,,
-1.002034594,12155448696,,uops_executed.core,task_ramp_test,329729099,33.18,,
-1.002034594,1675196566,,mem_inst_retired.all_stores,task_ramp_test,330722691,33.28,,
-1.002034594,3532382411,,mem_inst_retired.all_loads,task_ramp_test,331739696,33.38,,
-1.002034594,2283232066,,br_inst_retired.all_branches,task_ramp_test,332880227,33.50,,
-1.002034594,8693488,,fp_arith_inst_retired.scalar_double,task_ramp_test,332104389,33.42,,
-
+     1.002034594,12155448696,,uops_executed.core,task_ramp_test,329729099,33.18,,
+     1.002034594,1675196566,,mem_inst_retired.all_stores,task_ramp_test,330722691,33.28,,
+     1.002034594,3532382411,,mem_inst_retired.all_loads,task_ramp_test,331739696,33.38,,
+     1.002034594,2283232066,,br_inst_retired.all_branches,task_ramp_test,332880227,33.50,,
+     1.002034594,8693488,,fp_arith_inst_retired.scalar_double,task_ramp_test,332104389,33.42,,
+     1.002034594,0,,fp_arith_inst_retired.scalar_single,task_ramp_test,332059617,33.42,,
+     1.002034594,0,,fp_arith_inst_retired.128b_packed_double,task_ramp_test,332052099,33.41,,
+     1.002034594,0,,fp_arith_inst_retired.128b_packed_single,task_ramp_test,331911529,33.40,,
+     1.002034594,0,,fp_arith_inst_retired.256b_packed_double,task_ramp_test,331910540,33.40,,
+     1.002034594,0,,fp_arith_inst_retired.256b_packed_single,task_ramp_test,331491882,33.34,,
+     1.002034594,0,,fp_arith_inst_retired.512b_packed_double,task_ramp_test,330541389,33.24,,
+     1.002034594,0,,fp_arith_inst_retired.512b_packed_single,task_ramp_test,329600293,33.15,,
+     2.003076967,13049974000,,uops_executed.core,task_ramp_test,332813859,33.39,,
+     2.003076967,1800628262,,mem_inst_retired.all_stores,task_ramp_test,333328293,33.42,,
+     2.003076967,3797318184,,mem_inst_retired.all_loads,task_ramp_test,333400761,33.43,,
 
 ```
 
@@ -157,6 +159,21 @@ time,value,,event,task,pid,cpu,,
 * 实验运行时长信息
 
 这些数据可用于后续分析、建模或绘图。
+title按顺序如下：
+time,value,unit,event,command,pid,cpu,metric_value,metric_unit
+| 列号 | 列名           | 你的值                  | 含义                    |
+| -- | ------------ | -------------------- | --------------------- |
+| 1  | time         | `1.002034594`        | 距离 perf 开始的时间（秒）      |
+| 2  | value        | `12155448696`        | 该事件在该时间窗口内的计数值        |
+| 3  | unit         | *(空)*                | 单位（硬件事件一般为空）          |
+| 4  | event        | `uops_executed.core` | PMU 硬件事件名             |
+| 5  | command      | `task_ramp_test`     | 被监控的进程名               |
+| 6  | pid          | `329729099`          | 进程 PID                |
+| 7  | cpu          | `33.18`              | 采样发生的 CPU（或 CPU 平均编号） |
+| 8  | metric_value | *(空)*                | perf 计算的派生指标（你没用 -M）  |
+| 9  | metric_unit  | *(空)*                | 派生指标单位                |
+
+
 
 ---
 
