@@ -129,7 +129,7 @@ bash collector.sh \
 ---
 
 ##输出结果展示：
-
+bops_x86_test_min.txt：
 ```
      1.002034594,12155448696,,uops_executed.core,task_ramp_test,329729099,33.18,,
      1.002034594,1675196566,,mem_inst_retired.all_stores,task_ramp_test,330722691,33.28,,
@@ -147,6 +147,13 @@ bash collector.sh \
      2.003076967,1800628262,,mem_inst_retired.all_stores,task_ramp_test,333328293,33.42,,
      2.003076967,3797318184,,mem_inst_retired.all_loads,task_ramp_test,333400761,33.43,,
 
+Terminal：
+{
+  "arch": "x86",
+  "interval_duration": 1.001007,
+  "BOPs": 4.790111,
+  "GFLOPS": 0.008660
+}
 ```
 
 ---
@@ -184,6 +191,7 @@ CPU-BOPs 是一个 **面向系统性能测量与研究场景的实验工具**，
 * 行为可复现
 * 资源可控
 * 数据可分析
+
 
 
 
