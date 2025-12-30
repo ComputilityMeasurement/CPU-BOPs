@@ -106,7 +106,7 @@ CPU-BOPs/
 > 说明：
 >
 > * `monitor-duration` 表示 **最长运行时间**。
-> * 如果负载提前结束，实验会提前进入“空闲监控阶段”。
+> * 如果负载提前结束，会直接结束测量。
 
 ---
 
@@ -131,21 +131,19 @@ bash collector.sh \
 ##输出结果展示：
 bops_x86_test_min.txt：
 ```
-     1.002034594,12155448696,,uops_executed.core,task_ramp_test,329729099,33.18,,
-     1.002034594,1675196566,,mem_inst_retired.all_stores,task_ramp_test,330722691,33.28,,
-     1.002034594,3532382411,,mem_inst_retired.all_loads,task_ramp_test,331739696,33.38,,
-     1.002034594,2283232066,,br_inst_retired.all_branches,task_ramp_test,332880227,33.50,,
-     1.002034594,8693488,,fp_arith_inst_retired.scalar_double,task_ramp_test,332104389,33.42,,
-     1.002034594,0,,fp_arith_inst_retired.scalar_single,task_ramp_test,332059617,33.42,,
-     1.002034594,0,,fp_arith_inst_retired.128b_packed_double,task_ramp_test,332052099,33.41,,
-     1.002034594,0,,fp_arith_inst_retired.128b_packed_single,task_ramp_test,331911529,33.40,,
-     1.002034594,0,,fp_arith_inst_retired.256b_packed_double,task_ramp_test,331910540,33.40,,
-     1.002034594,0,,fp_arith_inst_retired.256b_packed_single,task_ramp_test,331491882,33.34,,
-     1.002034594,0,,fp_arith_inst_retired.512b_packed_double,task_ramp_test,330541389,33.24,,
-     1.002034594,0,,fp_arith_inst_retired.512b_packed_single,task_ramp_test,329600293,33.15,,
-     2.003076967,13049974000,,uops_executed.core,task_ramp_test,332813859,33.39,,
-     2.003076967,1800628262,,mem_inst_retired.all_stores,task_ramp_test,333328293,33.42,,
-     2.003076967,3797318184,,mem_inst_retired.all_loads,task_ramp_test,333400761,33.43,,
+     1.002481419,9268048049,,uops_executed.core,task_test_min,327282121,32.72,,
+     1.002481419,1236976338,,mem_inst_retired.all_stores,task_test_min,330838132,33.08,,
+     1.002481419,2623043026,,mem_inst_retired.all_loads,task_test_min,335640222,33.56,,
+     1.002481419,1695549612,,br_inst_retired.all_branches,task_test_min,340943693,34.10,,
+     1.002481419,6335375,,fp_arith_inst_retired.scalar_double,task_test_min,342077198,34.22,,
+     1.002481419,0,,fp_arith_inst_retired.scalar_single,task_test_min,340471018,34.06,,
+     1.002481419,0,,fp_arith_inst_retired.128b_packed_double,task_test_min,337538359,33.77,,
+     1.002481419,0,,fp_arith_inst_retired.128b_packed_single,task_test_min,334720258,33.46,,
+     1.002481419,0,,fp_arith_inst_retired.256b_packed_double,task_test_min,331787667,33.17,,
+     1.002481419,0,,fp_arith_inst_retired.256b_packed_single,task_test_min,329843284,32.98,,
+     1.002481419,0,,fp_arith_inst_retired.512b_packed_double,task_test_min,327931553,32.79,,
+     1.002481419,0,,fp_arith_inst_retired.512b_packed_single,task_test_min,325238180,32.52,,
+
 ```
 
 Terminal：
@@ -154,13 +152,12 @@ Terminal：
 
   "arch": "x86",
   
-  "interval_duration": 1.001007,
+  "interval": "1s",
   
-  "BOPs": 4.790111,
-  
-  "GFLOPS": 0.008660
+  "BOPs": 40909915871
   
 }
+
 
 
 ---
@@ -198,6 +195,7 @@ CPU-BOPs 是一个 **面向系统性能测量与研究场景的实验工具**，
 * 行为可复现
 * 资源可控
 * 数据可分析
+
 
 
 
